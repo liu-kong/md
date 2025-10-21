@@ -130,7 +130,7 @@ async function giteeUpload(content: any, filename: string) {
     content: {
       download_url: string
     }
-    data: {
+    data?: {
       content: {
         download_url: string
       }
