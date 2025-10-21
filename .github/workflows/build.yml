@@ -1,54 +1,69 @@
-name: Build
+name: Build and Deploy
 
 on:
   push:
-    branches:
-      - main
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+    branches: [main]
+  workflow_dispatch:
 
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: ${{ github.workflow }} - ${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     if: github.repository == 'liu-kong/md'
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
 
       - name: Set up node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Install dependencies
-        run: npm install
+        run: pnpm install
 
-      - name: Build
-        run: npm run build
-
-      - name: Add .nojekyll file
+      - name: Determine build command
+        id: build-command
         run: |
-          touch ./dist/.nojekyll
+          if [[ "${{ secrets.BUILD_COMMAND }}" == "build:h5-netlify" ]]; then
+            echo "BUILD_COMMAND=build:h5-netlify" >> $GITHUB_ENV
+          else
+            echo "BUILD_COMMAND=build" >> $GITHUB_ENV
+          fi
+
+      - name: Run build
+        run: pnpm web ${{ env.BUILD_COMMAND }}
+
+      - name: Generate CNAME
+        run: |
+          mkdir -p apps/web/dist
+          echo "md.doocs.org" > apps/web/dist/CNAME
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
-          path: dist
-          
+          path: apps/web/dist
+
+  deploy-pages:
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github_pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-        
